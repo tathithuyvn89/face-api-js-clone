@@ -1,0 +1,106 @@
+<html>
+    <head>
+        <title>Face App</title>
+        <style>
+        #overlay, .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            }
+        </style>
+    </head>
+    <body>
+        <img src="img/mhm.JPG" id="refimg"  />
+        <canvas id="reflay" class="overlay"></canvas>
+
+        <script src="js/jquery-2.1.1.min.js"></script>
+        <script src="js/face-api.js"></script>
+        <script>
+            $(document).ready(function(){
+                
+                async function face(){
+                    
+                    const MODEL_URL = '/models'
+
+                    await faceapi.loadSsdMobilenetv1Model(MODEL_URL)
+                    await faceapi.loadFaceLandmarkModel(MODEL_URL)
+                    await faceapi.loadFaceRecognitionModel(MODEL_URL)
+                    await faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL)
+                    await faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL)
+
+                    const img= document.getElementById('refimg')
+                    let fullFaceDescriptions = await faceapi.detectAllFaces(img).withFaceLandmarks().withFaceExpressions().withFaceDescriptors().withAgeAndGender()
+                    const canvas = $('#reflay').get(0)
+                    faceapi.matchDimensions(canvas, img)
+
+                    fullFaceDescriptions = faceapi.resizeResults(fullFaceDescriptions, img)
+                    faceapi.draw.drawDetections(canvas, fullFaceDescriptions)
+                    // faceapi.draw.drawFaceLandmarks(canvas, fullFaceDescriptions)
+
+
+                    var con = canvas.getContext("2d");
+                    var imgr = new Image()
+                    imgr.src = "/img/glass.png";
+
+                    imgr.onload = () => {      con.drawImage(imgr, dx =  471.27335262298584, dy=366.8473286212282 - 4,dw =101.75236415863037,dh =40);  
+                    console.log(imgr.width)      };
+                    //485.00318117886485,  421.0191735548258
+                    console.log(fullFaceDescriptions[0].landmarks)
+
+                    
+                    const labels = ['prof', 'rio', 'tokyo', 'berlin', 'nairobi']
+
+                    const labeledFaceDescriptors = await Promise.all(
+                        labels.map(async label => {
+                            // fetch image data from urls and convert blob to HTMLImage element
+                            const imgUrl = `img/${label}.jpg`
+                            const img = await faceapi.fetchImage(imgUrl)
+                            
+                            // detect the face with the highest score in the image and compute it's landmarks and face descriptor
+                            const fullFaceDescription = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceExpressions().withFaceDescriptor().withAgeAndGender()
+                            
+                            if (!fullFaceDescription) {
+                            throw new Error(`no faces detected for ${label}`)
+                            }
+                            
+                            const faceDescriptors = [fullFaceDescription.descriptor]
+                            return new faceapi.LabeledFaceDescriptors(label, faceDescriptors)
+                        })
+                    );
+
+                    const maxDescriptorDistance = 0.6
+                    const faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, maxDescriptorDistance)
+
+                    const results = fullFaceDescriptions.map(fd => faceMatcher.findBestMatch(fd.descriptor))
+                    // add age and gender to image
+                    fullFaceDescriptions.forEach( detection => {
+                            const box = detection.detection.box
+                            const drawBox = new faceapi.draw.DrawBox(box, { label: Math.round(detection.age) + " year old " + detection.gender })
+                            drawBox.draw(canvas)
+                            })
+                    // add gend name to image
+                    // results.forEach((bestMatch, i) => {
+                    //     const box = fullFaceDescriptions[i].detection.box
+                    //     const text = bestMatch.toString()
+                    //     const drawBox = new faceapi.draw.DrawBox(box, { label: text })
+                    //     drawBox.draw(canvas)
+                    // })
+
+                    // add emotions to image
+                    const detection = await faceapi.detectAllFaces(img)
+                                    .withFaceLandmarks()
+                                    .withFaceExpressions();
+                    const dimensions = {
+                        width: img.width,
+                        height: img.height
+                    };
+
+                    const resizedDimensions = faceapi.resizeResults(detection, dimensions);
+                    faceapi.draw.drawFaceExpressions(canvas, resizedDimensions);
+                }
+                
+                face()
+            })
+        </script>
+    </body>
+</html>
